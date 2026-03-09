@@ -26,7 +26,3 @@ while True:
 		led4.value = False
 		time.sleep(0.5)
 	time.sleep(1)
-
-
-
-
