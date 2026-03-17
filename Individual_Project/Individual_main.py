@@ -12,10 +12,10 @@ bmp280 = adafruit_bmp280.Adafruit_BMP280_I2C(i2c)
 
 # Initialization for digital GPIOs
 btn1 = digitalio.DigitalInOut(board.D17)
-btn1.direction = digitalio.DigitalInOut.INPUT
+btn1.direction = digitalio.Direction.INPUT
 btn1.pull = digitalio.Pull.UP
 btn2 = digitalio.DigitalInOut(board.D27)
-btn2.direction = digitalio.DigitalInOut.INPUT
+btn2.direction = digitalio.Direction.INPUT
 btn2.pull = digitalio.Pull.UP
 
 # Setup for button input
@@ -25,22 +25,35 @@ last_time_1 = 0
 last_time_2 = 0
 debounce_time = 0.02  # 20 ms
 
+def set_level(set_temp, set_illuminance)
+
+
 def update_buttons():
     global last_state_1, last_state_2, last_time_1, last_time_2
 
     now = time.monotonic()
+    set_temp = False
+    set_illuminance = False
 
     current_1 = btn1.value
-    if current_1 != last_state_1 and (now - last_time_1) > debounce_time:
-        print("Button 1 Pressed" if not current_1 else "Button 1 Released")
-        last_state_1 = current_1
+    # detect ONLY press (True → False)
+    if last_state_1 and not current_1 and (now - last_time_1) > debounce_time:
+        print("Button 1 Pressed")
+        set_temp = True
         last_time_1 = now
 
+    last_state_1 = current_1  # always update state
+
     current_2 = btn2.value
-    if current_2 != last_state_2 and (now - last_time_2) > debounce_time:
-        print("Button 2 Pressed" if not current_2 else "Button 2 Released")
-        last_state_2 = current_2
+    # detect ONLY press (True → False)
+    if last_state_2 and not current_2 and (now - last_time_2) > debounce_time:
+        print("Button 2 Pressed")
+        set_illuminance = True
         last_time_2 = now
+
+    last_state_2 = current_2  # always update state
+
+    return set_temp, set_illuminance
 
 def read_lux():
     print("Current Illuminance: %.2f Lux" % bh1750.lux)
@@ -55,7 +68,7 @@ def mqtt_publish(temp, illuminance, topic):
     client.publish(topic, payload)
     print("Published:", payload)
 
-
+# -------------main-loop--------------------------------------------------------
 # ThingSpeak MQTT credentials
 broker = "mqtt3.thingspeak.com"
 port = 1883
@@ -84,7 +97,13 @@ client.connect(broker, port, 60)
 client.loop_start()
 
 while True:
-    update_buttons()
+    set_temp, set_illuminance = update_buttons()
+    if set_temp:
+        print(set_temp)   
+    if set_illuminance:
+        print(set_illuminance)
+    if set_temp or set_illuminance
+        temp_lvl, illuminance_lvl = set_level(set_temp, set_illuminance)
     now = time.monotonic()
     # MQTT publishing every 15s
     if now - last_publish > interval:
@@ -92,3 +111,5 @@ while True:
         temp = read_temp()
         mqtt_publish(temp, illuminance, topic)
         last_publish = now
+    set_illuminance = False
+    set_temp = False
