@@ -1,6 +1,6 @@
 import board
 import time
-# import digitalio
+import digitalio
 import adafruit_bh1750
 import adafruit_bmp280
 import paho.mqtt.client as mqtt
@@ -10,6 +10,37 @@ i2c = board.I2C()
 bh1750 = adafruit_bh1750.BH1750(i2c)
 bmp280 = adafruit_bmp280.Adafruit_BMP280_I2C(i2c)
 
+# Initialization for digital GPIOs
+btn1 = digitalio.DigitalInOut(board.D17)
+btn1.direction = digitalio.DigitalInOut.INPUT
+btn1.pull = digitalio.Pull.UP
+btn2 = digitalio.DigitalInOut(board.D27)
+btn2.direction = digitalio.DigitalInOut.INPUT
+btn2.pull = digitalio.Pull.UP
+
+# Setup for button input
+last_state_1 = btn1.value
+last_state_2 = btn2.value
+last_time_1 = 0
+last_time_2 = 0
+debounce_time = 0.02  # 20 ms
+
+def update_buttons():
+    global last_state_1, last_state_2, last_time_1, last_time_2
+
+    now = time.monotonic()
+
+    current_1 = btn1.value
+    if current_1 != last_state_1 and (now - last_time_1) > debounce_time:
+        print("Button 1 Pressed" if not current_1 else "Button 1 Released")
+        last_state_1 = current_1
+        last_time_1 = now
+
+    current_2 = btn2.value
+    if current_2 != last_state_2 and (now - last_time_2) > debounce_time:
+        print("Button 2 Pressed" if not current_2 else "Button 2 Released")
+        last_state_2 = current_2
+        last_time_2 = now
 
 def read_lux():
     print("Current Illuminance: %.2f Lux" % bh1750.lux)
@@ -51,18 +82,13 @@ client.connect(broker, port, 60)
 
 # Start loop
 client.loop_start()
-i = 0
 
 while True:
-    # gather sensor values
-    illuminance = read_lux()
-    temp = read_temp()
+    update_buttons()
     now = time.monotonic()
+    # MQTT publishing every 15s
     if now - last_publish > interval:
+        illuminance = read_lux()
+        temp = read_temp()
         mqtt_publish(temp, illuminance, topic)
         last_publish = now
-    i += 1
-    print("Loop number ", i)
-
-    
-   
