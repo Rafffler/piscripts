@@ -25,9 +25,6 @@ last_time_1 = 0
 last_time_2 = 0
 debounce_time = 0.02  # 20 ms
 
-def set_level(set_temp, set_illuminance)
-
-
 def update_buttons():
     global last_state_1, last_state_2, last_time_1, last_time_2
 
@@ -68,7 +65,6 @@ def mqtt_publish(temp, illuminance, topic):
     client.publish(topic, payload)
     print("Published:", payload)
 
-# -------------main-loop--------------------------------------------------------
 # ThingSpeak MQTT credentials
 broker = "mqtt3.thingspeak.com"
 port = 1883
@@ -96,14 +92,22 @@ client.connect(broker, port, 60)
 # Start loop
 client.loop_start()
 
+fixed_temp = False
+fixed_illuminance = False
+
+temp_lvl= 30
+illuminance_lvl = 800
+
 while True:
     set_temp, set_illuminance = update_buttons()
+    #print(f"Temp_btn: {set_temp} \nIllum_btn: {set_illuminance}")
     if set_temp:
-        print(set_temp)   
+        fixed_temp = not fixed_temp
+        print(fixed_temp)
     if set_illuminance:
-        print(set_illuminance)
-    if set_temp or set_illuminance
-        temp_lvl, illuminance_lvl = set_level(set_temp, set_illuminance)
+        fixed_illuminance = not fixed_illuminance
+        print(fixed_illuminance)
+
     now = time.monotonic()
     # MQTT publishing every 15s
     if now - last_publish > interval:
