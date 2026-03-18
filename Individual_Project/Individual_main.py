@@ -29,7 +29,7 @@ debounce_time = 0.02  # 20 ms
 # Setup LED for PWM
 duty = 0
 led = pwmio.PWMOut(board.D12, frequency=1000, duty_cycle=duty)
-Kp = 50 # proportional gain of the control loop, value between 10 and 100
+Kp = 20 # proportional gain of the control loop, value between 10 and 100
 
 def light_control(illuminance_lvl, illuminance, duty):
     error = illuminance_lvl - illuminance
@@ -65,15 +65,17 @@ def update_buttons():
     return set_temp, set_illuminance
 
 def read_lux():
-    print("Current Illuminance: %.2f Lux" % bh1750.lux)
+    # print("Current Illuminance: %.2f Lux" % bh1750.lux)
     return(bh1750.lux)
 
 def read_temp():
-    print("Current Temperature: %.2f Celsius" % bmp280.temperature)
+    # print("Current Temperature: %.2f Celsius" % bmp280.temperature)
     return(bmp280.temperature)
 
 def mqtt_publish(illuminance_lvl, temp_lvl, fixed_temp, fixed_illuminance, temp, illuminance, topic):
-    if fixed_temp:
+    if fixed_temp & fixed_illuminance:
+         payload = f"field1={temp}&field2={illuminance}&field3={temp_lvl}&field4={illuminance_lvl}"
+    elif fixed_temp:
         payload = f"field1={temp}&field2={illuminance}&field3={temp_lvl}"
     elif fixed_illuminance:
         payload = f"field1={temp}&field2={illuminance}&field4={illuminance_lvl}"
@@ -113,26 +115,36 @@ fixed_temp = False
 fixed_illuminance = False
 
 temp_lvl= 30
-illuminance_lvl = 800
+illuminance_lvl = 50
 
-while True:
-    illuminance = read_lux()
-    temp = read_temp()
-    set_temp, set_illuminance = update_buttons()
-    if set_temp:
-        fixed_temp = not fixed_temp
-    if set_illuminance:
-        fixed_illuminance = not fixed_illuminance
-    now = time.monotonic()
-    # MQTT publishing every 15s
-    if now - last_publish > interval:
-        mqtt_publish(illuminance_lvl, temp_lvl, fixed_temp, fixed_illuminance, temp, illuminance, topic)
-        last_publish = now
-    set_illuminance = False
-    set_temp = False
-    if fixed_illuminance:
-        duty = light_control(illuminance_lvl, illuminance, duty)
-        led.duty_cycle = duty
-    else:
-        duty = 0
+try:
+    while True:
+        illuminance = read_lux()
+        temp = read_temp()
+        set_temp, set_illuminance = update_buttons()
+        if set_temp:
+            fixed_temp = not fixed_temp
+        if set_illuminance:
+            fixed_illuminance = not fixed_illuminance
+        now = time.monotonic()
+        # MQTT publishing every 15s
+        if now - last_publish > interval:
+            mqtt_publish(illuminance_lvl, temp_lvl, fixed_temp, fixed_illuminance, temp, illuminance, topic)
+            last_publish = now
+        set_illuminance = False
+        set_temp = False
+        if fixed_illuminance:
+            duty = light_control(illuminance_lvl, illuminance, duty)
+            led.duty_cycle = duty
+        else:
+            duty = 0
+            led.duty_cycle = duty
+        time.sleep(0.1) # necessary because the BH1750 is too slow
+
+except KeyboardInterrupt:
+    print("\nProgram stopped by user")
+    # cleanup
+    led.duty_cycle = 0
+    client.loop_stop()
+    client.disconnect()
     
