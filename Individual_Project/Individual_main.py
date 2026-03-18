@@ -3,6 +3,7 @@ import time
 import digitalio
 import adafruit_bh1750
 import adafruit_bmp280
+import pwmio
 import paho.mqtt.client as mqtt
 
 # Initialization for the I2C bus
@@ -24,6 +25,17 @@ last_state_2 = btn2.value
 last_time_1 = 0
 last_time_2 = 0
 debounce_time = 0.02  # 20 ms
+
+# Setup LED for PWM
+duty = 0
+led = pwmio.PWMOut(board.D12, frequency=1000, duty_cycle=duty)
+Kp = 50 # proportional gain of the control loop, value between 10 and 100
+
+def light_control(illuminance_lvl, illuminance, duty):
+    error = illuminance_lvl - illuminance
+    duty += int(Kp * error) # proportional control
+    duty = max(0, min(65535, duty))  # clamp to valid range
+    return duty
 
 def update_buttons():
     global last_state_1, last_state_2, last_time_1, last_time_2
@@ -60,8 +72,13 @@ def read_temp():
     print("Current Temperature: %.2f Celsius" % bmp280.temperature)
     return(bmp280.temperature)
 
-def mqtt_publish(temp, illuminance, topic):
-    payload = f"field1={temp}&field2={illuminance}"
+def mqtt_publish(illuminance_lvl, temp_lvl, fixed_temp, fixed_illuminance, temp, illuminance, topic):
+    if fixed_temp:
+        payload = f"field1={temp}&field2={illuminance}&field3={temp_lvl}"
+    elif fixed_illuminance:
+        payload = f"field1={temp}&field2={illuminance}&field4={illuminance_lvl}"
+    else:
+        payload = f"field1={temp}&field2={illuminance}&field3=NaN&field4=NaN"
     client.publish(topic, payload)
     print("Published:", payload)
 
@@ -99,21 +116,23 @@ temp_lvl= 30
 illuminance_lvl = 800
 
 while True:
+    illuminance = read_lux()
+    temp = read_temp()
     set_temp, set_illuminance = update_buttons()
-    #print(f"Temp_btn: {set_temp} \nIllum_btn: {set_illuminance}")
     if set_temp:
         fixed_temp = not fixed_temp
-        print(fixed_temp)
     if set_illuminance:
         fixed_illuminance = not fixed_illuminance
-        print(fixed_illuminance)
-
     now = time.monotonic()
     # MQTT publishing every 15s
     if now - last_publish > interval:
-        illuminance = read_lux()
-        temp = read_temp()
-        mqtt_publish(temp, illuminance, topic)
+        mqtt_publish(illuminance_lvl, temp_lvl, fixed_temp, fixed_illuminance, temp, illuminance, topic)
         last_publish = now
     set_illuminance = False
     set_temp = False
+    if fixed_illuminance:
+        duty = light_control(illuminance_lvl, illuminance, duty)
+        led.duty_cycle = duty
+    else:
+        duty = 0
+    
