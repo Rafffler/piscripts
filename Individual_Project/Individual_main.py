@@ -31,11 +31,32 @@ duty = 0
 led = pwmio.PWMOut(board.D12, frequency=1000, duty_cycle=duty)
 Kp = 20 # proportional gain of the control loop, value between 10 and 100
 
+# Setup for relaisboard switching the heater
+heater = digitalio.DigitalInOut(board.D4)
+heater.direction = digitalio.Direction.OUTPUT
+heater.value = True
+
 def light_control(illuminance_lvl, illuminance, duty):
     error = illuminance_lvl - illuminance
     duty += int(Kp * error) # proportional control
     duty = max(0, min(65535, duty))  # clamp to valid range
     return duty
+
+def temp_control(temp, temp_lvl):
+    error = temp_lvl - temp
+    # hysteresis is necessary to avoid flickering
+    if error > 1.0:
+        heater.value = False
+        heater_on = True
+        # print("Heating ON")
+    elif error < -1.0:
+        heater.value = True
+        heater_on = False
+        # print("Heating OFF")
+    else:
+        heater_on = heater.value == False
+    return heater_on
+
 
 def update_buttons():
     global last_state_1, last_state_2, last_time_1, last_time_2
@@ -113,8 +134,9 @@ client.loop_start()
 
 fixed_temp = False
 fixed_illuminance = False
+heater_on = True
 
-temp_lvl= 30
+temp_lvl= 26
 illuminance_lvl = 50
 
 try:
@@ -140,6 +162,11 @@ try:
             duty = 0
             led.duty_cycle = duty
         time.sleep(0.1) # necessary because the BH1750 is too slow
+        if fixed_temp:
+            heater_on = temp_control(temp, temp_lvl)
+        else:
+            heater.value = True
+            heater_on = False
 
 except KeyboardInterrupt:
     print("\nProgram stopped by user")
