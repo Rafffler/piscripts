@@ -68,7 +68,7 @@ def update_buttons():
     current_1 = btn1.value
     # detect ONLY press (True → False)
     if last_state_1 and not current_1 and (now - last_time_1) > debounce_time:
-        print("Temperature control activated")
+        print("Temperature button pressed")
         set_temp = True
         last_time_1 = now
 
@@ -77,7 +77,7 @@ def update_buttons():
     current_2 = btn2.value
     # detect ONLY press (True → False)
     if last_state_2 and not current_2 and (now - last_time_2) > debounce_time:
-        print("Illuminance control activated")
+        print("Illuminance button pressed")
         set_illuminance = True
         last_time_2 = now
 
@@ -134,7 +134,7 @@ fixed_temp = False
 fixed_illuminance = False
 heater_on = True
 
-temp_lvl= 30
+temp_lvl= 24
 illuminance_lvl = 50
 
 try:
