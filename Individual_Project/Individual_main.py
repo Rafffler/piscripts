@@ -6,35 +6,43 @@ import adafruit_bmp280
 import pwmio
 import paho.mqtt.client as mqtt
 
-# Initialization for the I2C bus
-i2c = board.I2C()
-bh1750 = adafruit_bh1750.BH1750(i2c)
-bmp280 = adafruit_bmp280.Adafruit_BMP280_I2C(i2c)
-
-# Initialization for digital GPIOs
-btn1 = digitalio.DigitalInOut(board.D17)
-btn1.direction = digitalio.Direction.INPUT
-btn1.pull = digitalio.Pull.UP
-btn2 = digitalio.DigitalInOut(board.D27)
-btn2.direction = digitalio.Direction.INPUT
-btn2.pull = digitalio.Pull.UP
-
+# mode flags
+fixed_temp = False
+fixed_illuminance = False
+heater_on = True
+# wanted values for control functions
+temp_lvl= 24
+illuminance_lvl = 50
 # Setup for button input
-last_state_1 = btn1.value
-last_state_2 = btn2.value
+last_state_1 = False
+last_state_2 = False
 last_time_1 = 0
 last_time_2 = 0
 debounce_time = 0.02  # 20 ms
-
 # Setup LED for PWM
 duty = 0
 led = pwmio.PWMOut(board.D12, frequency=1000, duty_cycle=duty)
 Kp = 20 # proportional gain of the control loop, value between 10 and 100
 
-# Setup for relaisboard switching the heater
-heater = digitalio.DigitalInOut(board.D4)
-heater.direction = digitalio.Direction.OUTPUT
-heater.value = True
+def init_relais():
+    heater = digitalio.DigitalInOut(board.D4)
+    heater.direction = digitalio.Direction.OUTPUT
+    heater.value = True
+    return heater
+
+def init_sensors():
+    i2c = board.I2C()
+    return (adafruit_bh1750.BH1750(i2c),
+            adafruit_bmp280.Adafruit_BMP280_I2C(i2c))
+
+def init_buttons():
+    btn1 = digitalio.DigitalInOut(board.D17)
+    btn1.direction = digitalio.Direction.INPUT
+    btn1.pull = digitalio.Pull.UP
+    btn2 = digitalio.DigitalInOut(board.D27)
+    btn2.direction = digitalio.Direction.INPUT
+    btn2.pull = digitalio.Pull.UP
+    return btn1, btn2
 
 def light_control(illuminance_lvl, illuminance, duty):
     error = illuminance_lvl - illuminance
@@ -45,20 +53,18 @@ def light_control(illuminance_lvl, illuminance, duty):
 def temp_control(temp, temp_lvl):
     error = temp_lvl - temp
     # hysteresis is necessary to avoid flickering
-    if error > 1.0:
+    if error > 0.2:
         heater.value = False
         heater_on = True
-        # print("Heating ON")
-    elif error < -1.0:
+    elif error < -0.2:
         heater.value = True
         heater_on = False
-        # print("Heating OFF")
     else:
         heater_on = heater.value == False
     return heater_on
 
 
-def update_buttons():
+def update_buttons(btn1, btn2):
     global last_state_1, last_state_2, last_time_1, last_time_2
 
     now = time.monotonic()
@@ -130,18 +136,18 @@ client.connect(broker, port, 60)
 # Start loop
 client.loop_start()
 
-fixed_temp = False
-fixed_illuminance = False
-heater_on = True
-
-temp_lvl= 24
-illuminance_lvl = 50
+# Initializing sensors
+bh1750, bmp280 = init_sensors()
+# Initializing buttons
+btn1, btn2 = init_buttons()
+# Initializing relais board
+heater = init_relais()
 
 try:
     while True:
         now = time.monotonic()
         # update buttons
-        set_temp, set_illuminance = update_buttons()
+        set_temp, set_illuminance = update_buttons(btn1, btn2)
         # read sensors
         illuminance = read_lux()
         temp = read_temp()
@@ -173,8 +179,9 @@ try:
         time.sleep(0.1) 
 except KeyboardInterrupt:
     print("\nProgram stopped by user")
-    # cleanup
+finally:
     led.duty_cycle = 0
+    heater.value = True
     client.loop_stop()
     client.disconnect()
-    
+    print("Program cleanup done")
