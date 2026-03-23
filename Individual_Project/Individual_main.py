@@ -68,7 +68,7 @@ def update_buttons():
     current_1 = btn1.value
     # detect ONLY press (True → False)
     if last_state_1 and not current_1 and (now - last_time_1) > debounce_time:
-        print("Button 1 Pressed")
+        print("Temperature control activated")
         set_temp = True
         last_time_1 = now
 
@@ -77,7 +77,7 @@ def update_buttons():
     current_2 = btn2.value
     # detect ONLY press (True → False)
     if last_state_2 and not current_2 and (now - last_time_2) > debounce_time:
-        print("Button 2 Pressed")
+        print("Illuminance control activated")
         set_illuminance = True
         last_time_2 = now
 
@@ -86,15 +86,13 @@ def update_buttons():
     return set_temp, set_illuminance
 
 def read_lux():
-    # print("Current Illuminance: %.2f Lux" % bh1750.lux)
     return(bh1750.lux)
 
 def read_temp():
-    # print("Current Temperature: %.2f Celsius" % bmp280.temperature)
     return(bmp280.temperature)
 
 def mqtt_publish(illuminance_lvl, temp_lvl, fixed_temp, fixed_illuminance, temp, illuminance, topic):
-    if fixed_temp & fixed_illuminance:
+    if fixed_temp and fixed_illuminance:
          payload = f"field1={temp}&field2={illuminance}&field3={temp_lvl}&field4={illuminance_lvl}"
     elif fixed_temp:
         payload = f"field1={temp}&field2={illuminance}&field3={temp_lvl}"
@@ -102,26 +100,26 @@ def mqtt_publish(illuminance_lvl, temp_lvl, fixed_temp, fixed_illuminance, temp,
         payload = f"field1={temp}&field2={illuminance}&field4={illuminance_lvl}"
     else:
         payload = f"field1={temp}&field2={illuminance}&field3=NaN&field4=NaN"
-    client.publish(topic, payload)
-    print("Published:", payload)
+    result = client.publish(topic, payload)
+    if result.rc != mqtt.MQTT_ERR_SUCCESS:
+        print("MQTT publish failed:", result.rc)
+    # print("Published:", payload)
 
 # ThingSpeak MQTT credentials
 broker = "mqtt3.thingspeak.com"
 port = 1883
-
 client_id = "AwwzCBAZOQwDNgIEMjAOETo"
 username = "AwwzCBAZOQwDNgIEMjAOETo"
 password = "JCTweFsgwqOj5XtTaYBl0/j9"
-
 channel_id = "3300174"
+
 # intervall of 15 secs for MQTT transmission
 interval = 15
 last_publish = 0
-# f allows to embed variables directly inside a string
 topic = f"channels/{channel_id}/publish"
 
 # Create client
-client = mqtt.Client(client_id=client_id)
+client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2,client_id=client_id)
 
 # Set authentication
 client.username_pw_set(username, password)
@@ -136,38 +134,43 @@ fixed_temp = False
 fixed_illuminance = False
 heater_on = True
 
-temp_lvl= 26
+temp_lvl= 30
 illuminance_lvl = 50
 
 try:
     while True:
+        now = time.monotonic()
+        # update buttons
+        set_temp, set_illuminance = update_buttons()
+        # read sensors
         illuminance = read_lux()
         temp = read_temp()
-        set_temp, set_illuminance = update_buttons()
+        # update mode flags
         if set_temp:
             fixed_temp = not fixed_temp
         if set_illuminance:
             fixed_illuminance = not fixed_illuminance
-        now = time.monotonic()
-        # MQTT publishing every 15s
-        if now - last_publish > interval:
-            mqtt_publish(illuminance_lvl, temp_lvl, fixed_temp, fixed_illuminance, temp, illuminance, topic)
-            last_publish = now
-        set_illuminance = False
-        set_temp = False
+        # control LED
         if fixed_illuminance:
             duty = light_control(illuminance_lvl, illuminance, duty)
             led.duty_cycle = duty
         else:
             duty = 0
             led.duty_cycle = duty
-        time.sleep(0.1) # necessary because the BH1750 is too slow
+        # control heater
         if fixed_temp:
             heater_on = temp_control(temp, temp_lvl)
         else:
             heater.value = True
             heater_on = False
-
+        # MQTT publishing every 15s
+        if now - last_publish > interval:
+            print("Current Temperature: %.2f Celsius" % bmp280.temperature)
+            print("Current Illuminance: %.2f Lux" % bh1750.lux)
+            mqtt_publish(illuminance_lvl, temp_lvl, fixed_temp, fixed_illuminance, temp, illuminance, topic)
+            last_publish = now
+        # necessary because the BH1750 is too slow
+        time.sleep(0.1) 
 except KeyboardInterrupt:
     print("\nProgram stopped by user")
     # cleanup
