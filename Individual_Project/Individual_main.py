@@ -10,9 +10,6 @@ import paho.mqtt.client as mqtt
 fixed_temp = False
 fixed_illuminance = False
 heater_on = True
-# wanted values for control functions
-temp_lvl= 24
-illuminance_lvl = 50
 # Setup for button input
 last_state_1 = False
 last_state_2 = False
@@ -23,6 +20,16 @@ debounce_time = 0.02  # 20 ms
 duty = 0
 led = pwmio.PWMOut(board.D12, frequency=1000, duty_cycle=duty)
 Kp = 20 # proportional gain of the control loop, value between 10 and 100
+
+def get_valid_input(name, min_value, max_value, value_type=float):
+    while True:
+        try:
+            value = value_type(input(f"Enter {name} ({min_value} to {max_value}): "))
+            if min_value <= value <= max_value:
+                return value
+            print(f"Invalid range. {name} must be between {min_value} and {max_value}.")
+        except ValueError:
+            print(f"Invalid input. Enter a valid {value_type.__name__}.")
 
 def init_relais():
     heater = digitalio.DigitalInOut(board.D4)
@@ -142,6 +149,10 @@ bh1750, bmp280 = init_sensors()
 btn1, btn2 = init_buttons()
 # Initializing relais board
 heater = init_relais()
+
+# set values for light and temperature control
+temp_lvl = get_valid_input("temperature setpoint in °C", 10, 35, float)
+illuminance_lvl = get_valid_input("illuminance setpoint in lux", 0, 1000, float)
 
 try:
     while True:
